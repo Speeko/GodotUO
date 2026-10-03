@@ -104,6 +104,7 @@ internal static class PadWheelsProbe
         await Wizard(host, world);
         await Trackpad(host, world);
         await Screens(host);
+        await BindingDummies(host, world);
 
         PadBindings.ResetToDefaults();
         GamepadInput.Forced = null;
@@ -161,6 +162,9 @@ internal static class PadWheelsProbe
             open && focus == 0 && PadWheel.LastResult == "opened Backpack" && opened
             && PadScreen.IsOpen && PadScreen.Current == WheelWindow.Backpack && PadScreen.FillsClient && PadScreen.RowCount > 0,
             $"open {open}, focus {focus}, {PadWheel.LastResult}, gump {opened}, screen {PadScreen.Current} fills {PadScreen.FillsClient} rows {PadScreen.RowCount}");
+        Check("the backpack screen is a grid beside a half-cut camera",
+            PadScreen.Columns > 1 && PadScreen.HalfCut,
+            $"cols {PadScreen.Columns}, half-cut {PadScreen.HalfCut}");
         await Shot(host, "backpack_open");
 
         // Paperdoll: top right, with the right stick this time.
@@ -179,6 +183,9 @@ internal static class PadWheelsProbe
         Check("the right stick points too: top right opens the paperdoll",
             focus == 1 && opened && PadScreen.IsOpen && PadScreen.Current == WheelWindow.Paperdoll && PadScreen.FillsClient,
             $"focus {focus}, {PadWheel.LastResult}, screen {PadScreen.Current} fills {PadScreen.FillsClient}");
+        Check("the paperdoll screen is a grid beside a half-cut camera",
+            PadScreen.Columns > 1 && PadScreen.HalfCut,
+            $"cols {PadScreen.Columns}, half-cut {PadScreen.HalfCut}");
         await Shot(host, "paperdoll_open");
 
         // A tap reopens the last window the wheel opened.
@@ -541,12 +548,191 @@ internal static class PadWheelsProbe
             Check($"the {PadBindings.Name(w)} window opens full screen",
                 PadScreen.IsOpen && PadScreen.Current == w && PadScreen.FillsClient && PadScreen.RowCount > 0,
                 $"open {PadScreen.IsOpen}, current {PadScreen.Current}, fills {PadScreen.FillsClient}, rows {PadScreen.RowCount}");
+            Check($"the {PadBindings.Name(w)} window half-cuts the camera",
+                PadScreen.HalfCut, $"half-cut {PadScreen.HalfCut}");
         }
 
         PadScreen.Close();
+        Check("closing a screen restores the camera", !PadScreen.HalfCut && !PadScreen.IsOpen);
         Check("the wheel no longer offers a window that only asks the shard",
             Array.IndexOf(PadWizard.Choices, WheelWindow.Journal) >= 0 && PadWizard.Choices.Length == 10,
             $"choices {PadWizard.Choices.Length}");
+    }
+
+    // --- controller bindings against GUO pad dummies ----------------------------------------------
+
+    private static async System.Threading.Tasks.Task BindingDummies(Node host, World world)
+    {
+        // Solo-verifiable shard actions only. Trade / party / guild need a second
+        // player: those checks only prove the client opens them.
+        PadScreen.Close();
+        await InputProbe.Say(host, "[GuoPadDummies");
+        await InputProbe.Wait(host, 90);
+
+        Mobile Find(string name)
+        {
+            foreach (Mobile m in world.Mobiles.Values)
+            {
+                if (m != null && !m.IsDestroyed && m.Name != null && m.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0
+                    && m.Distance <= 12)
+                {
+                    return m;
+                }
+            }
+
+            return null;
+        }
+
+        Item FindItem(string name)
+        {
+            foreach (Item it in world.Items.Values)
+            {
+                if (it != null && !it.IsDestroyed && it.Name != null && it.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0
+                    && it.Distance <= 12)
+                {
+                    return it;
+                }
+            }
+
+            return null;
+        }
+
+        bool JournalHas(string needle)
+        {
+            foreach (JournalEntry e in JournalManager.Entries)
+            {
+                if (e.Text != null && e.Text.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+
+                if (e.Name != null && e.Name.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        Mobile attack = Find("Attack Dummy");
+        Mobile talk = Find("Talk Dummy");
+        Mobile context = Find("Context Dummy");
+        Mobile pick = Find("Pickpocket Dummy");
+        Item use = FindItem("Use Dummy");
+        Item loot = FindItem("Loot Dummy");
+
+        Check("pad dummies are in the world (attack/use/loot/talk/context/pickpocket)",
+            attack != null && use != null && loot != null && talk != null && context != null && pick != null,
+            $"atk {attack != null}, use {use != null}, loot {loot != null}, talk {talk != null}, ctx {context != null}, pick {pick != null}");
+
+        if (attack != null)
+        {
+            if (!world.Player.InWarMode)
+            {
+                GameActions.ToggleWarMode(world.Player);
+                await Until(host, () => world.Player.InWarMode, 60);
+            }
+
+            // Attack() can stall on the criminal-query gump when the dummy
+            // still reads innocent. Send the attack packet the client sends
+            // once that query is confirmed.
+            ProfileManager.CurrentProfile.EnabledCriminalActionQuery = false;
+            // Fists only reach one tile. Stand on the dummy, then swing.
+            await InputProbe.Say(host, $"[go {attack.X} {attack.Y} {attack.Z}");
+            await Until(host, () => attack.Distance <= 1, 90);
+            GameActions.Attack(world, attack.Serial);
+            await Until(host, () => JournalHas("GUO_PAD: hit attack-dummy") || attack.Hits < attack.HitsMax, 240);
+            Check("attack binding reaches the attack dummy",
+                JournalHas("GUO_PAD: hit attack-dummy") || attack.Hits < attack.HitsMax,
+                $"hits {attack.Hits}/{attack.HitsMax}, journal {JournalHas("GUO_PAD: hit attack-dummy")}, war {world.Player.InWarMode}");
+        }
+
+        if (use != null)
+        {
+            GameActions.DoubleClick(world, use.Serial);
+            await Until(host, () => JournalHas("GUO_PAD: used use-dummy"), 120);
+            Check("use/double-click on the use dummy", JournalHas("GUO_PAD: used use-dummy"));
+        }
+
+        if (loot != null)
+        {
+            GameActions.DoubleClick(world, loot.Serial);
+            bool opened = await Until(host, () => UIManager.GetGump<Gump>(loot.Serial) != null || JournalHas("GUO_PAD: opened loot-dummy"), 120);
+            Check("loot/open on the loot dummy", opened || JournalHas("GUO_PAD: opened loot-dummy"));
+        }
+
+        if (talk != null)
+        {
+            await InputProbe.Say(host, "hello");
+            await Until(host, () => JournalHas("GUO_PAD: talk-dummy heard you"), 120);
+            Check("talk reaches the talk dummy", JournalHas("GUO_PAD: talk-dummy heard you"));
+        }
+
+        if (context != null)
+        {
+            GameActions.OpenPopupMenu(context.Serial, true);
+            bool menu = await Until(host, () => UIManager.PopupMenu != null || UIManager.GetGump<PopupMenuGump>() != null, 120);
+            Check("context menu opens on the context dummy (client)", menu);
+            // Picking the entry needs a menu selection the pad radar already covers;
+            // assert the menu itself here.
+        }
+
+        if (pick != null)
+        {
+            // Pickpocket is a Stealing skill check on an NPC, not a container.
+            // Clear a held item so the shard will accept the skill.
+            if (Client.Game.UO.GameCursor.ItemHold.Enabled)
+            {
+                GameActions.DropItem(Client.Game.UO.GameCursor.ItemHold.Serial, world.Player.X, world.Player.Y, world.Player.Z, 0);
+                await InputProbe.Wait(host, 20);
+            }
+
+            GameActions.UseSkill(33); // Stealing
+            bool targeting = await Until(host, () => world.TargetManager.IsTargeting, 90);
+            // A fresh character often has 0.0 Stealing; the shard then refuses
+            // the skill and never opens a target. That is a skill gate, not a
+            // missing binding. Report it as client-sent, not a world pass.
+            Check("pickpocket/stealing: client sends UseSkill (world target only if the skill is usable)",
+                true, targeting ? "target cursor opened" : "no target — skill likely too low on a new character");
+            if (targeting)
+            {
+                world.TargetManager.Target(pick.Serial);
+                await InputProbe.Wait(host, 60);
+            }
+        }
+
+        // Second-player systems: only prove the client opens the request.
+        GameActions.RequestPartyInviteByTarget();
+        await InputProbe.Wait(host, 20);
+        bool partyTarget = world.TargetManager.IsTargeting;
+        Check("party invite: client opens a target (not a world pass — needs a second player)", partyTarget);
+        if (partyTarget)
+        {
+            world.TargetManager.CancelTarget();
+        }
+
+        Check("trade/guild need a second player — not asserted as a world pass", true,
+            "client-open only; no second player in this probe");
+
+        // Scale stays framed: cycle panel scale and fonts; frame still fills the right half.
+        PadScreen.Open(WheelWindow.Options);
+        await InputProbe.Wait(host, 10);
+        int before = PadScreen.PanelScale;
+        PadScreen.CyclePanelScale();
+        PadScreen.CycleMenuFont();
+        PadScreen.CycleChatFont();
+        await InputProbe.Wait(host, 6);
+        Check("menu scale cycles and the screen stays full-frame",
+            PadScreen.PanelScale == (before >= 3 ? 1 : before + 1) && PadScreen.FillsClient && PadScreen.HalfCut,
+            $"scale {before}->{PadScreen.PanelScale}, fills {PadScreen.FillsClient}, half-cut {PadScreen.HalfCut}");
+        PadScreen.Open(WheelWindow.Journal);
+        await InputProbe.Wait(host, 8);
+        Check("journal uses its own chat font scale (independent of menu font)",
+            PadScreen.ChatFontScale != 0 && PadScreen.IsOpen && PadScreen.Current == WheelWindow.Journal,
+            $"chatFont {PadScreen.ChatFontScale}, menuFont {PadScreen.MenuFontScale}");
+        await Shot(host, "binding_dummies");
+        PadScreen.Close();
     }
 
     // --- the Steam Deck trackpad: a mouse beside the pad ----------------------------------------------

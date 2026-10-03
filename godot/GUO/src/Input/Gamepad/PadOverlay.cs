@@ -157,6 +157,9 @@ namespace GUO.Input.Gamepad
             _ => 0x0E75,
         };
 
+        // Open backpack container and the player paperdoll base: the big art the screens upscale.
+        public const ushort PackSack = 0x003C, PaperDoll = 0x07d0;
+
         private static IEnumerable<ushort> Gumps()
         {
             foreach (ushort first in new[] { Overlay.Stone, Overlay.Parchment })
@@ -172,6 +175,8 @@ namespace GUO.Input.Gamepad
             yield return BracketBottom;
             yield return LineTrack;
             yield return LineFill;
+            yield return PackSack;
+            yield return PaperDoll;
         }
 
         /// <summary>Asks for every piece; true once all of them are in. Cheap once true.</summary>

@@ -177,6 +177,7 @@ namespace GUO.Input.Gamepad
             if (PadScreen.IsOpen)
             {
                 PadScreen.Tick();
+                PadScreen.Steer(_leftX, _leftY, (float) delta);
 
                 return;
             }
@@ -314,12 +315,14 @@ namespace GUO.Input.Gamepad
 
         private static void OnButton(InputEventJoypadButton e)
         {
-            // A full-screen window takes the D-pad: move in its list, not walk.
+            // A full-screen window takes the D-pad: move in its list or grid, not walk.
             if (PadScreen.IsOpen && e.ButtonIndex is JoyButton.DpadUp or JoyButton.DpadDown or JoyButton.DpadLeft or JoyButton.DpadRight)
             {
                 if (e.Pressed)
                 {
-                    PadScreen.Move(e.ButtonIndex is JoyButton.DpadUp or JoyButton.DpadLeft ? -1 : 1);
+                    int dx = e.ButtonIndex == JoyButton.DpadLeft ? -1 : e.ButtonIndex == JoyButton.DpadRight ? 1 : 0;
+                    int dy = e.ButtonIndex == JoyButton.DpadUp ? -1 : e.ButtonIndex == JoyButton.DpadDown ? 1 : 0;
+                    PadScreen.Move(dx, dy);
                 }
 
                 return;
@@ -519,6 +522,16 @@ namespace GUO.Input.Gamepad
             switch (command)
             {
                 case PadCommand.AttackLast:
+                    if (PadScreen.IsOpen)
+                    {
+                        if (pressed && PadScreen.HasItemActions)
+                        {
+                            PadScreen.Drop();
+                        }
+
+                        return;
+                    }
+
                     if (PadRadar.IsOpen)
                     {
                         PadRadar.Look();
@@ -581,6 +594,16 @@ namespace GUO.Input.Gamepad
                     return;
 
                 case PadCommand.MacroRow:
+                    if (PadScreen.IsOpen)
+                    {
+                        if (pressed && PadScreen.HasItemActions)
+                        {
+                            PadScreen.Equip();
+                        }
+
+                        return;
+                    }
+
                     if (PadRadar.IsOpen)
                     {
                         PadRadar.Context();
@@ -608,6 +631,16 @@ namespace GUO.Input.Gamepad
                     return;
 
                 case PadCommand.Drawer:
+                    if (PadScreen.IsOpen)
+                    {
+                        if (pressed && PadScreen.HasItemActions)
+                        {
+                            PadScreen.Context();
+                        }
+
+                        return;
+                    }
+
                     // The one-screen drawer: a no-op with a second screen, or with the panel off.
                     GUO.Platform.Android.DualScreen.ToggleDrawer();
 

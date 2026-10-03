@@ -144,6 +144,10 @@ namespace GUO.Input.Gamepad
         public const float AxisOn = 0.6f, AxisOff = 0.3f;
         public const int DefaultRadarRange = 10;
 
+        // Reserved, not bound, not in Set controls (Controller.md, note for Moshu):
+        // open swapper, move across paperdolls, change auto behavior, control, spectate.
+        // One UO connection is one character. Do not treat these as a world pass.
+
         /// <summary>The order "Set controls" asks in.</summary>
         public static readonly PadCommand[] Order =
         {

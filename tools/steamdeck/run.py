@@ -60,7 +60,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from guo.config import Config, load_config  # noqa: E402
+from guo.config import Config, godot_config_dir, godot_data_dir, load_config  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE / "export_presets.template.cfg"
@@ -110,11 +110,10 @@ class Paths:
         self.preset_file = self.project / "export_presets.cfg"
         self.solution = self.project / "GUO.sln"
 
-        appdata = Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming")))
-        self.godot_config = appdata / "Godot"
+        self.godot_config = godot_config_dir()
         # "4.7.2-stable" + mono -> "4.7.2.stable.mono", Godot's folder name.
         self.templates_version = cfg.godot_version.replace("-", ".") + ".mono"
-        self.templates_dir = self.godot_config / "export_templates" / self.templates_version
+        self.templates_dir = godot_data_dir() / "export_templates" / self.templates_version
         self.template_bin = self.templates_dir / f"linux_debug.{ARCH}"
         self.templates_tpz = (
             cfg.tools / "godot" / "templates" / f"Godot_v{cfg.godot_version}_mono_export_templates.tpz"
@@ -480,6 +479,9 @@ def launcher_script(deck: Deck, shard_host: str, shard_port: int, data_default: 
     # --data-default: no --client-data, so the client resolves its data itself
     # by ADR-0021 (saved setting, then ~/UO, else the first-run screen).
     client_data = "" if data_default else f" --client-data {data}"
+    # The client falls back to 7.0.107.76 without it, and a shard that reads
+    # a newer version from its own copy of the install kicks an older one.
+    version = f" --client-version {deck.cfg.client_version}" if deck.cfg.client_version else ""
     return (
         "#!/bin/bash\n"
         "# GUO on the Steam Deck. Written by tools/steamdeck/run.py push; edit\n"
@@ -487,7 +489,7 @@ def launcher_script(deck: Deck, shard_host: str, shard_port: int, data_default: 
         "# Extra flags go through: ./guo.sh --login-probe-stay, ./guo.sh --sound.\n"
         "# After \"--\": the client reads only what follows it (OS.GetCmdlineUserArgs).\n"
         'cd "$(dirname "$(readlink -f "$0")")" || exit 1\n'
-        f'exec ./{EXE_NAME} -- --play{client_data} --host {shard_host} --port {shard_port}{account} "$@"\n'
+        f'exec ./{EXE_NAME} -- --play{client_data}{version} --host {shard_host} --port {shard_port}{account} "$@"\n'
     )
 
 

@@ -52,7 +52,7 @@ useful thing you can send. See `CONTRIBUTING.md`.
 |---|---|
 | **Windows** | 10 or 11, x64 |
 | **Godot** | 4.7.2 stable, **mono/.NET** build — fetched by the bootstrap step |
-| **.NET SDK** | 8.0 for the desktop client (`net8.0`); 9.0 for the Android export, where `GUO.csproj` switches to `net9.0`; 10.0 for the dev shard and the parity tools |
+| **.NET SDK** | 10.0 to build: the C# uses C# 14 (`LangVersion` is `latest`), which an 8.0 or 9.0 SDK cannot compile. The desktop client still targets `net8.0`, so the 8.0 runtime is needed to run it; 9.0 for the Android export, where `GUO.csproj` switches to `net9.0`. 10.0 also builds the dev shard and the parity tools. |
 | **Python** | 3.12+ (tooling) |
 | **A UO client install** | Any modern Classic client; developed against 7.0.107 |
 
@@ -94,6 +94,7 @@ CI** — the console build blocks and writes to stdout.
 | Platform | Start here | Where it stands |
 |---|---|---|
 | **Windows** | `launchers\game\play.bat`, or a build from the `release` workflow's artifacts | Plays on a local shard |
+| **Linux** (desktop) | `launchers/pipeline/00_bootstrap.sh`, then `launchers/game/play.sh` — [docs/wiki/Linux.md](docs/wiki/Linux.md) | Smoke passes; plays on a local shard |
 | **Android** (ARM64) | `launchers\android\doctor.bat`, then `launchers\android\smoke.bat` — [docs/wiki/Android-Build.md](docs/wiki/Android-Build.md) | Debug build; runs on one device, including its second screen |
 | **Steam Deck** (SteamOS) | `launchers\steamdeck\doctor.bat`, then `launchers\steamdeck\smoke.bat` — [docs/steamdeck.md](docs/steamdeck.md) | Exports, installs over ssh and reaches the login screen (ADR-0018) |
 | **Godot editor** | `launchers\editor\open_project.bat` — [docs/wiki/Editor.md](docs/wiki/Editor.md) | Browse the UO data, edit the world, export it to a shard |

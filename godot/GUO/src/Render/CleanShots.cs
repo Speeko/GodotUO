@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using Godot;
 using GUO.Game.UI.Gumps;
+using GUO.Input;
 
 namespace GUO.Renderer;
 
@@ -48,7 +49,33 @@ internal sealed partial class CleanShots : Node
     }
 
     /// <summary>Whether a gump is drawn: all of them normally; only the world's viewport while hidden.</summary>
-    public static bool Draws(Gump g) => !Hidden || g is WorldViewportGump;
+    /// <summary>
+    /// Whether a classic gump is drawn. Clean-shots hides everything but the
+    /// world viewport. In Gamepad mode the pad screens replace the PC UI, so
+    /// classic gumps, the top bar and mouse panels stay hidden too (they are
+    /// not disposed — switching input brings them back).
+    /// </summary>
+    public static bool Draws(Gump g)
+    {
+        if (g is WorldViewportGump)
+        {
+            return true;
+        }
+
+        if (Hidden)
+        {
+            return false;
+        }
+
+        // Gamepad: only the world viewport from the classic UI stack. PadOverlay
+        // (wheel, radar, PadScreen) is a Godot layer, not a gump.
+        if (InputMode.Current == InputKind.Gamepad)
+        {
+            return false;
+        }
+
+        return true;
+    }
 
     // Last in the frame: a layer that sets its own visibility each frame is hidden after it.
     public override void _Ready() => ProcessPriority = int.MaxValue;

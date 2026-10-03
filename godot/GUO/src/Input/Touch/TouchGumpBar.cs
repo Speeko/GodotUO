@@ -326,7 +326,8 @@ namespace GUO.Input.Touch
             GumpPresentation.FitFullHeight();
             GumpPresentation.FitPaperdolls();
             Covered = GumpPresentation.FullHeightOpen() || Modern.ModernGump.IsOpen;
-            Visible = !GUO.Game.Managers.ScreenSaver.Active && !Covered && !Renderer.CleanShots.Hidden;
+            Visible = !GUO.Game.Managers.ScreenSaver.Active && !Covered && !Renderer.CleanShots.Hidden
+                && GUO.Input.InputMode.Current != GUO.Input.InputKind.Gamepad;
 
             if (!Shown)
             {
@@ -1258,6 +1259,12 @@ namespace GUO.Input.Touch
                 case "options":
                     GameActions.OpenSettings(world);
 
+                    break;
+                case "scripts":
+                    Modern.ModernScripts.Show(world);
+                    break;
+                case "stopscript":
+                    world.StopScripts();
                     break;
             }
         }

@@ -55,7 +55,7 @@ public partial class EditorSmoke : Node
 
     private readonly string _out;
     private readonly EditorData _data;
-    private readonly AssetsDock _assets;
+    private readonly AssetsView _assets;
     private readonly InspectorDock _inspector;
     private readonly WorldView _world;
     private readonly ShardDock _shard;
@@ -71,11 +71,17 @@ public partial class EditorSmoke : Node
     private bool _reloadTest;
     private bool _afterReload;
 
+    /// <summary>The F3 popup the plugin made, for the search checks.</summary>
+    public SearchPopup Search { get; set; }
+
+    /// <summary>The AI dock the plugin made, for the AI checks (ADR-0028).</summary>
+    public AiDock Ai { get; set; }
+
     public EditorSmoke() : this(null, null, null, null, null, null)
     {
     }
 
-    public EditorSmoke(string outDir, EditorData data, AssetsDock assets, InspectorDock inspector, WorldView world, ShardDock shard)
+    public EditorSmoke(string outDir, EditorData data, AssetsView assets, InspectorDock inspector, WorldView world, ShardDock shard)
     {
         _world = world;
         _shard = shard;
@@ -97,7 +103,7 @@ public partial class EditorSmoke : Node
     /// <summary>The output directory from the command line, or null when this is not a smoke run.</summary>
     public static string OutDirFromArgs() => ArgValue(Flag);
 
-    private static string ArgValue(string flag)
+    internal static string ArgValue(string flag)
     {
         string[] args = OS.GetCmdlineUserArgs();
         for (int i = 0; i < args.Length; i++)
@@ -153,10 +159,8 @@ public partial class EditorSmoke : Node
                 // Bring the next tab to the front and let it lay out.
                 if (_panel >= _assets.Panels.Count)
                 {
-                    // Phase 5: the asset overlay, before the World tab boots
-                    // so the world's own loaders get it too.
-                    RunAssets();
-                    _stage = 6;
+                    // Phase 4b: the F3 search, on the index the editor built.
+                    _stage = 50;
                     _frames = 0;
                     break;
                 }
@@ -183,6 +187,28 @@ public partial class EditorSmoke : Node
                     Capture(_assets.Panels[_panel]);
                     _panel++;
                     _stage = 1;
+                }
+
+                break;
+
+            case 50:
+                if (StepSearch())
+                {
+                    _stage = 60;
+                    _frames = 0;
+                }
+
+                break;
+
+            case 60:
+                // The AI hub (ADR-0028): ACP, Ollama and queue, against stubs.
+                if (StepAi())
+                {
+                    // Phase 5: the asset overlay, before the World tab boots
+                    // so the world's own loaders get it too.
+                    RunAssets();
+                    _stage = 6;
+                    _frames = 0;
                 }
 
                 break;
@@ -470,6 +496,19 @@ public partial class EditorSmoke : Node
             if (shown.Text.Length == 0)
             {
                 failures.Add("the inspection has no text");
+            }
+        }
+
+        // --guo-editor-multi-dump 0x64,0x1000: also write those multis'
+        // composites (what the panel and inspector draw) to <out>/multi_XXXX.png.
+        if (panel is MultiPanel && ArgValue("--guo-editor-multi-dump") is string dump)
+        {
+            Directory.CreateDirectory(_out);
+            foreach (string tok in dump.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                int mid = tok.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? Convert.ToInt32(tok[2..], 16) : int.Parse(tok);
+                Image composite = MultiPanel.CompositeOf(_data, mid);
+                composite?.SavePng(Path.Combine(_out, $"multi_{mid:X4}{Suffix}.png"));
             }
         }
 
@@ -1103,28 +1142,15 @@ public partial class EditorSmoke : Node
     /// </summary>
     private bool AimAt(ushort id)
     {
-        var chunk = _world.Host.World.Map.GetChunk2(EditBx, EditBy, load: true);
-        for (int x = 0; x < 8; x++)
+        Vector2I? screen = WorldAim.ScreenOf(_world, _data, EditBx, EditBy, id);
+        if (screen is not { } at)
         {
-            for (int y = 0; y < 8; y++)
-            {
-                for (var o = chunk?.GetHeadObject(x, y); o != null; o = o.TNext)
-                {
-                    if (o is GUO.Game.GameObjects.Static && o.Graphic == id)
-                    {
-                        Image art = _data.ArtImage(EditorData.LandCount + id);
-                        int h = art?.GetHeight() ?? 44;
-                        var world = new GUO.Compat.Point(o.RealScreenPosition.X + 22, o.RealScreenPosition.Y + 44 - h / 3);
-                        var screen = _world.Host.Scene.Camera.WorldToScreen(world);
-                        _world.ForcedMouse = new Vector2I(screen.X, screen.Y);
-                        _editReport[$"aim_{id:X4}"] = new[] { screen.X, screen.Y };
-                        return true;
-                    }
-                }
-            }
+            return false;
         }
 
-        return false;
+        _world.ForcedMouse = at;
+        _editReport[$"aim_{id:X4}"] = new[] { at.X, at.Y };
+        return true;
     }
 
     private Color RadarAt(int x, int y)

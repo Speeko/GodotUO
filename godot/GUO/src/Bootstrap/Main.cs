@@ -244,6 +244,10 @@ public partial class Main : Node
                 {
                     TouchProbeThenQuit();
                 }
+                else if (_options.ScriptsProbe)
+                {
+                    ScriptsProbeThenQuit();
+                }
                 else if (_options.MacroProbe)
                 {
                     MacroProbeThenQuit();
@@ -291,6 +295,10 @@ public partial class Main : Node
                 else if (_options.GamepadProbe)
                 {
                     GamepadProbeThenQuit();
+                }
+                else if (_options.PadWheelsProbe)
+                {
+                    PadWheelsProbeThenQuit();
                 }
                 else if (_options.OneScreenProbe)
                 {
@@ -374,6 +382,10 @@ public partial class Main : Node
         }
 
         string dataDir = GuoDataDirectory();
+
+        // The pad's "Set controls" is offered once after a first login on a
+        // pad; a probe driving a pad must not meet it unless it is the probe for it.
+        GUO.Input.Gamepad.PadWizard.OfferAllowed = !_options.Scripted || _options.PadWheelsProbe;
 
         if (_options.ScratchProfile && !_options.OwnProfile)
         {
@@ -465,7 +477,8 @@ public partial class Main : Node
         try
         {
             using var client = GUO.Store.StoreOptions.CreateClient(System.Environment.GetEnvironmentVariable("UO_STORE_URL") ?? GUO.Store.StoreAddress.Default);
-            var entry = System.Linq.Enumerable.FirstOrDefault(System.Linq.Enumerable.OrderByDescending(System.Linq.Enumerable.Where(client.FetchIndex().GetAwaiter().GetResult(), e => e.Manifest.Id == id), e => GUO.Store.StorePack.Version(e.Manifest.Version)));
+            var catalogue = client.FetchIndex().GetAwaiter().GetResult();
+            var entry = System.Linq.Enumerable.FirstOrDefault(System.Linq.Enumerable.OrderByDescending(System.Linq.Enumerable.Where(catalogue, e => e.Manifest.Id == id), e => GUO.Store.StorePack.Version(e.Manifest.Version)));
 
             if (entry == null)
             {
@@ -474,7 +487,7 @@ public partial class Main : Node
                 return;
             }
 
-            string path = client.Install(entry).GetAwaiter().GetResult();
+            string path = client.InstallWithDependencies(entry, catalogue).GetAwaiter().GetResult();
             GD.Print($"[GUO] store install: {id} {entry.Manifest.Version} ({entry.Manifest.Kind}) installed at {path}");
         }
         catch (Exception ex)
@@ -628,6 +641,7 @@ public partial class Main : Node
         || !string.IsNullOrEmpty(_options.PostFxSheet)
         || _options.DoorProbe
         || _options.GamepadProbe
+        || _options.PadWheelsProbe
         || _options.OneScreenProbe
         || _options.GlyphShots
         || _options.AssetProbe.Length > 0
@@ -745,6 +759,20 @@ public partial class Main : Node
     {
         await Preamble();
         Quit(await GlyphShots.Run(this, _options.ScreenshotDir) ? 0 : 1);
+    }
+
+    /// <summary>The menu wheel, the interact radar, the new buttons and "Set controls"; see PadWheelsProbe.</summary>
+    private async void PadWheelsProbeThenQuit()
+    {
+        await Preamble();
+        await PadWheelsProbe.Run(this, _options.ScreenshotDir);
+
+        if (_options.Stay)
+        {
+            return;
+        }
+
+        Quit(PadWheelsProbe.Passed ? 0 : 1);
     }
 
     /// <summary>Walk and confirm/cancel by injected joypad events; see GamepadProbe.</summary>
@@ -958,6 +986,14 @@ public partial class Main : Node
         Quit(GalleryProbe.Passed ? 0 : 1);
     }
 
+    /// <summary>Exercise the embedded script editor against the dev shard.</summary>
+    private async void ScriptsProbeThenQuit()
+    {
+        bool passed = await ScriptsProbe.Run(this, _options.ScreenshotDir, _options.ScreenshotName);
+        bool captured = await CaptureFrame();
+        Quit(passed && captured ? 0 : 1);
+    }
+
     /// <summary>Tap the six macros against fixtures and exit with the verdict; see MacroProbe.</summary>
     private async void MacroProbeThenQuit()
     {
@@ -1055,6 +1091,35 @@ public partial class Main : Node
         _configShardHost = _options.ShardHost;
         _configShardPort = _options.ShardPort;
         _sessionEncryption = d.Encryption;
+
+        if (d.ContentLock != null)
+        {
+            // The shard's packs (ADR-0026): mounted at archive load like a selected deployment. An
+            // explicit UO_CONTENT_LOCK (a developer's or a probe's) still wins.
+            if (!System.IO.File.Exists(d.ContentLock))
+            {
+                ShardSession.Drop(d, "its content lock is gone; play on it again to reinstall them", "packs");
+                _sessionEncryption = d.OwnEncryption;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("UO_CONTENT_LOCK")))
+            {
+                System.Environment.SetEnvironmentVariable("UO_CONTENT_LOCK", d.ContentLock);
+
+                // A lock that won't mount (a pack changed or removed since, a descriptor the
+                // client can't serve) drops the session instead of stopping GUO from starting.
+                GUO.Store.StoreRuntimeContent.SessionLock = d.ContentLock;
+                GUO.Store.StoreRuntimeContent.SessionLockFailed = why => ShardSession.Drop(d, why, "packs");
+            }
+
+            if (d.DataFolder == null)
+            {
+                _options.UseShardSession(d.Host, d.Port, null, null, null);
+                GD.Print($"[GUO] shard session : \"{d.Name}\" with its content {d.ContentIdentity?[..Math.Min(12, d.ContentIdentity.Length)]}");
+                return;
+            }
+        }
 
         if (d.DataFolder == null)
         {
@@ -1280,12 +1345,14 @@ public partial class Main : Node
                 || !string.IsNullOrEmpty(PostFxSheet)
                 || DoorProbe
                 || GamepadProbe
+                || PadWheelsProbe
                 || OneScreenProbe
                 || GlyphShots
                 || EffectsProbe > 0
                 || EndureSeconds > 0
                 || TouchProbe
                 || MacroProbe
+                || ScriptsProbe
                 || UiGallery
                 || PresentationParity
                 || LoginProbe
@@ -1397,6 +1464,9 @@ public partial class Main : Node
         /// <summary>Check the gamepad layer by injected joypad events (--gamepad-probe).</summary>
         public bool GamepadProbe { get; private set; }
 
+        /// <summary>The pad's menu wheel, radar, buttons and "Set controls" (--pad-wheels-probe).</summary>
+        public bool PadWheelsProbe { get; private set; }
+
         /// <summary>--one-screen-probe: the one-screen drawer in the world; see OneScreenProbe.</summary>
         public bool OneScreenProbe { get; private set; }
 
@@ -1436,6 +1506,8 @@ public partial class Main : Node
 
         /// <summary>Tap each of the touch bar's six macros against spawned fixtures; see MacroProbe.</summary>
         public bool MacroProbe { get; private set; }
+
+        public bool ScriptsProbe { get; private set; }
 
         /// <summary>Picture each of GUO's own mobile UIs; see GalleryProbe.</summary>
         public bool UiGallery { get; private set; }
@@ -1650,6 +1722,15 @@ public partial class Main : Node
                     case "--gamepad-probe":
                         o.GamepadProbe = true;
                         break;
+                    case "--pad-wheels-probe":
+                        o.PadWheelsProbe = true;
+                        o.ScratchProfile = true;
+                        break;
+                    case "--pregame-3d":
+                    case "--pregame-classic":
+                    case "--pregame3d-probe":
+                        // Read by GUO.Pregame3D.Pregame3DSettings (docs/ui/pregame_3d.md).
+                        break;
                     case "--one-screen-probe":
                         o.OneScreenProbe = true;
                         break;
@@ -1731,6 +1812,10 @@ public partial class Main : Node
                         break;
                     case "--presentation-parity":
                         o.PresentationParity = true;
+                        break;
+                    case "--scripts-probe":
+                        o.ScriptsProbe = true;
+                        o.ScratchProfile = true;
                         break;
                     case "--macro-probe":
                         o.Touch = true;

@@ -4,6 +4,8 @@ From a fresh clone to a running client, on Windows. Every step is a launcher
 under `launchers\`; each one calls `launchers\_shared\common.bat` first, which
 resolves the [Configuration](Configuration.md) and locates the engine.
 
+On Linux, every launcher here has a `.sh` twin; see [Linux](Linux.md).
+
 Other platforms start from the same clone: [Windows Build](Windows-Build.md)
 (a standalone `GUO.exe`), [Android Build](Android-Build.md) (a debug APK) and
 [Steam Deck](Steam-Deck.md) (a Linux build pushed over ssh). To play without
@@ -15,7 +17,7 @@ building anything, see [Download a build](#download-a-build).
 |---|---|
 | **Windows** | 10 or 11, x64 |
 | **Godot** | 4.7.2 stable, **mono/.NET** build. Fetched by the bootstrap into `tools\godot` (gitignored). Do not install your own; the version is pinned. |
-| **.NET SDK** | 8.0 for the client. 10.0 for the dev shard and the parity tools. (The Android export needs 9.0 as well, see [Android Build](Android-Build.md).) |
+| **.NET SDK** | 10.0, with the 8.0 runtime. The client targets `net8.0` but is written in C# 14 (`LangVersion` `latest`; the `field` keyword, first-class spans), which only the 10.0 SDK compiles: with an 8.0 SDK alone the build fails in `MessageManager.cs` and `SystemChatControl.cs`. 10.0 also builds the dev shard and the parity tools. (The Android export needs 9.0 as well, see [Android Build](Android-Build.md).) |
 | **Python** | 3.12 or newer, on `PATH` as `python` (or set `UO_PYTHON`). |
 | **Git** | Any recent version; the bootstrap clones the upstream reference. |
 | **A UO client install** | Any modern Classic client. Developed against 7.0.107.76. |

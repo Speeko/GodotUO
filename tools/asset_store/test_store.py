@@ -134,18 +134,33 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 416)
 
     def test_web_catalogue_headless(self):
+        self.web_catalogue(signer=None)
+
+    def test_web_catalogue_headless_signed(self):
+        # A signed (v2, ADR-0026) index renders the same page.
+        from asset_store import catalogue
+        key = self.root / "catalogue.key"
+        catalogue.keygen(key)
+        self.web_catalogue(signer=(catalogue.read_secret(key), {"id": "test", "title": "Test"}, ""))
+
+    def web_catalogue(self, signer):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Web contract test requires Node 18+ (built-ins only; no browser/npm packages)")
         root = self.root / "cdn"
-        for kind in ("background", "theme", "sound", "profile-preset", "screensaver"):
+        for kind in ("background", "theme", "sound", "profile-preset", "razor-script", "screensaver"):
+            self.manifest["files"] = {"still.png": hashlib.sha256(self.payload).hexdigest()}
             self.manifest.update(kind=kind, id="moongate-shimmer" if kind == "background" else "sample-" + kind,
                                  title='<img src=x onerror="throw 1"> ' + kind, author="<b>Fixture creator</b>")
-            if kind == "screensaver":
+            if kind == "razor-script":
+                source = b"sysmsg 'Store script'\n"
+                self.manifest["files"]["hello.razor"] = hashlib.sha256(source).hexdigest()
+                publish(self.pack({"hello.razor": source}), root, signer)
+            elif kind == "screensaver":
                 self.manifest.update(min_profile_version=11)
                 self.manifest["files"]["loop.ogv"] = hashlib.sha256(b"loop").hexdigest()
-                publish(self.pack({"loop.ogv": b"loop"}), root)
+                publish(self.pack({"loop.ogv": b"loop"}), root, signer)
             else:
-                publish(self.pack(), root)
+                publish(self.pack(), root, signer)
         httpd = server(root, port=0)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()

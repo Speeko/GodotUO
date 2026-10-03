@@ -383,9 +383,16 @@ None of these files are committed: they derive from the install.
 
 ## 12. GUO Asset Store packs (ADR-0019)
 
+Version 2 content envelopes, deployment targets, dependencies, component
+identities and activation locks are specified in
+[asset_pack_ecosystem.md](asset_pack_ecosystem.md). V1 below remains the
+presentation-pack contract. V2 installation is inert; individual runtime
+consumers require their own activation evidence.
+
 A pack is a ZIP with one UTF-8 `manifest.json` at its root. Schema id:
-**`guo/store-pack@1`**. It contains only user media/settings, never UO client
-data or executable code. `art-override` is reserved and rejected.
+**`guo/store-pack@1`**. It contains user media/settings and the explicitly
+allowed shader/script formats below, never UO client data or native/.NET
+executables. `art-override` is reserved and rejected.
 
 ```json
 {
@@ -409,7 +416,7 @@ data or executable code. `art-override` is reserved and rejected.
 - IDs match `[a-z0-9][a-z0-9-]{0,63}` (Windows device names excluded).
   Versions are three decimal components, each 0..2147483647, without
   leading zeros. Compare numerically, not lexicographically.
-- Kinds: `background`, `theme`, `sound`, `profile-preset`, `screensaver`. Licence allowlist:
+- Kinds: `background`, `theme`, `sound`, `profile-preset`, `screensaver`, `postfx`, `razor-script`. Licence allowlist:
   `CC0-1.0`, `CC-BY-4.0`, `CC-BY-SA-4.0`, `MIT`, `BSD-2-Clause`,
   `BSD-3-Clause`, `Apache-2.0`. Publishers are responsible for provenance;
   the identifier does not establish ownership. Non-CC0 packs must include
@@ -427,6 +434,14 @@ data or executable code. `art-override` is reserved and rejected.
   first profile version that can pick one; both the publisher and the
   installer reject anything else. Its `preview` is the still the Store
   shows.
+  `.razor` is allowed only in `razor-script` packs, which require at least
+  one such file. Each script is nonempty UTF-8 text (an optional UTF-8 BOM
+  is accepted), at most 262144 bytes and 65536 UTF-16 code units after BOM
+  removal; control characters other than tab, CR and LF are refused.
+  Both publisher and installer validate the text, not its CE semantics.
+  The kind means Razor CE command scripts, not Razor Enhanced Python or
+  ASP.NET Razor templates. Other supported media/text files may accompany it;
+  existing licence, preview, path and hash requirements still apply.
   `.mul`, `.uop`, `.idx`, `.def`, and any basename beginning `cliloc`
   are forbidden case-insensitively, even when renamed with another suffix.
 - Paths use `/`, are relative, have no empty, `.` or `..` components,
@@ -476,6 +491,124 @@ Publication validates before writing; an existing id/version is immutable
 (identical bytes are a no-op). Rebuilding an index verifies all published
 ZIPs; replacement of the index is atomic. HTTP serves GET/HEAD and single
 byte ranges (`206`, `Content-Range`); unsatisfiable ranges return `416`.
+
+### Signed catalogue index, `guo/store-index@2` (ADR-0026)
+
+A catalogue that signs its index publishes two files at its root:
+`index.json` and `index.json.sig`. The signature file is one line,
+`ed25519:` followed by the standard base64 of the 64-byte Ed25519 (RFC 8032)
+signature over the **exact bytes** of `index.json`. Nothing is
+canonicalised, so the index is never re-serialised between signing and
+verifying.
+
+```json
+{
+  "schema": "guo/store-index@2",
+  "catalogue": { "id": "guo-official", "title": "GUO packs", "homepage": "https://..." },
+  "key": "ed25519:<base64 of the 32-byte public key>",
+  "sequence": 1791043200,
+  "issued": "2026-10-02T20:00:00Z",
+  "expires": "2026-11-01T20:00:00Z",
+  "packs": [
+    {
+      "manifest": { "...": "the pack's manifest.json, as section 12 above" },
+      "sha256": "<64 lowercase hex digits of the whole ZIP>",
+      "size": 123456,
+      "urls": ["packs/moongate-shimmer/1.0.0.zip", "https://mirror.example.org/moongate-shimmer-1.0.0.zip"],
+      "preview_url": "previews/moongate-shimmer/1.0.0/still.png",
+      "provenance": "Rendered in Blender from an original scene"
+    }
+  ]
+}
+```
+
+- `catalogue.id` follows the pack id syntax. `title` is at most 200
+  characters, with no control characters. `homepage` is optional.
+- `key` names the signing key. A client checks that it is the key it trusts
+  for this catalogue (below); naming it only lets a new catalogue be
+  approved.
+- `sequence` is an integer that only rises. The publisher uses at least the
+  current Unix time in seconds, and at least the previous index's number
+  plus one. A client refuses an index whose sequence is lower than the
+  highest it has seen from that catalogue.
+- `expires` is optional. A client refuses an index past it.
+- `urls`: 1 to 16 places to fetch the ZIP, tried in order. A relative URL
+  resolves under the index and may not leave it. An absolute URL is HTTPS,
+  or plain HTTP only to loopback or a private LAN address (10/8,
+  172.16/12, 192.168/16, 169.254/16, IPv6 loopback, link-local and
+  unique-local, `localhost`, `*.lan`, `*.local`). No credentials and no
+  fragment. Downloads from a signed index may follow up to five redirects,
+  never from HTTPS to HTTP; the hash and size decide whether the bytes are
+  the pack.
+- `provenance` is optional, at most 500 characters, no control characters:
+  how the content was made (the content policy, `docs/store/content_policy.md`).
+- A `guo/store-index@1` index (above) is still read, and the client shows its
+  packs as **unsigned**. `run.py` writes v2 whenever `UO_STORE_SIGNING_KEY`
+  is set, and v1 otherwise.
+
+**The client's trust list** is `user://store/.catalogues.json`, an array of
+`{"url", "id", "title", "key", "sequence"}`. A catalogue added by URL has no
+`key` until the player approves the fingerprint the Store shows: the first
+16 hex digits of the key's SHA-256, in groups of four. A different key at a
+known address is refused until the player approves it again. The official
+catalogue (`StoreTrust.OfficialUrl`) is trusted by the keys compiled into the
+client (`StoreTrust.OfficialKeys`), and cannot be removed.
+
+**Listing files** (`run.py build-catalogue`, the catalogue repository): one
+JSON file per pack version at `packs/<id>/<version>.json`, with exactly the
+fields `urls` (HTTPS), `sha256`, `size` and an optional `provenance`. The
+builder downloads each ZIP once from the first URL that serves the listed
+bytes, verifies it as a pack, and lists it. In a store folder,
+`listing/<id>/<version>.json` holds the same fields; there `urls` adds
+mirrors after the store's own copy, and `sha256` and `size` are not needed.
+
+**Secret key file** (`run.py keygen`): one line, `guo-catalogue-secret `
+followed by `ed25519:` and the base64 of the 32-byte seed. It is never
+committed, and never leaves the publisher's machine or CI secret store.
+
+### Shard content descriptor, `guo/shard-content@1` (ADR-0026)
+
+What a shard runs, for its players' clients. `tools/shard_content/run.py
+deploy` writes it to `<shard>/Data/GUO/public/shard-content.json`; the shard
+serves it from any web server, and its server-list entry names the address
+as `content` (`servers.json`).
+
+```json
+{
+  "schema": "guo/shard-content@1",
+  "shard": {"name": "Example Shard", "host": "play.example.com", "port": 2593},
+  "catalogues": [{"url": "https://packs.example.com/", "key": "ed25519:<base64>"}],
+  "lock": {"schema": "guo/content-lock@1", "pack": "example-pack", "version": "1.0.0",
+           "identity_hash": "<64 hex>", "bindings": {"example-pack:stone": {"type": "static", "id": 6001}}},
+  "scripts": "forbidden"
+}
+```
+
+- At most `StorePack.MaxManifest` bytes, unique keys, fetched over HTTPS (HTTP
+  only on this computer or the LAN) with no redirects.
+- `shard.name` is 1 to 200 characters, no control characters. `host` and
+  `port` are informational; the server entry decides where the client connects.
+- `catalogues`: 1 to 16 distinct catalogue addresses, HTTPS or local HTTP.
+  `key` is the catalogue's signing key. It may be left out only for HTTP on
+  this computer or the LAN, and then the catalogue must be unsigned. A signed
+  catalogue named without a key, or one answering with a different key, is
+  refused.
+- `lock` is a deployment lock (above). The client installs `pack` `version`
+  and its dependencies from the catalogues, and the installed closure must
+  hash to `identity_hash`.
+- `scripts` is `allowed` (the default) or `forbidden`. When forbidden, the
+  client's script packs do not run while it plays on that shard.
+
+The player's yes to the shard's question approves the keys the descriptor
+names. The client writes the lock to `<store>/.shard-content/<first 16 hex of
+identity_hash>.json` and restarts. The shard session (`shard_session.json`)
+records `content_url`, `content_lock`, `content_identity` and
+`scripts_allowed`; at the next start the lock is mounted for that run only, as
+`UO_CONTENT_LOCK` would mount it. An explicit `UO_CONTENT_LOCK` still wins.
+
+The same deploy writes the neutral server export, `guo/server-content@1`, to
+`<shard>/Data/GUO/server-content.json`. The ModernUO bridge loads it at start
+when `UO_SERVER_CONTENT` is not set, and logs its `identity_hash`.
 
 ### Screensavers in the client (profile v11)
 
@@ -952,3 +1085,35 @@ Beside `settings.json` in the client home: GUO's own choices made on the pre-gam
 |---|---|
 | `login_background` | What the canvas background (ADR-0016) shows before a profile is loaded: `""` for the last character's (ADR-0016's own rule, the default), `builtin-grey`, `builtin-wood`, `builtin:<name>` from `assets/backgrounds/backgrounds.json`, or `embedded:<file>.png`, a picture compiled in from `Resources/embedded/backgrounds`. A choice that no longer exists reads as the default. In the world the profile's own background applies |
 
+## 21. The agent request queue (`agent_queue.db`)
+
+One SQLite file per user at `UO_AGENT_QUEUE` (default `%APPDATA%/GUO/agent_queue.db`, or
+`~/.config/guo/agent_queue.db`), written by `tools/agent_queue` and read by the editor's chat window and
+by agent sessions. WAL mode, 30 s busy timeout. Times are UTC ISO-8601 with milliseconds.
+
+| `requests` column | Meaning |
+|---|---|
+| `id` | Integer primary key, increasing |
+| `to_agent`, `from_agent` | Agent names (`[A-Za-z0-9_.-]{1,40}`); `to_agent` may be `*` (the first watcher using `--include-broadcast` takes it) |
+| `text` | At most 8000 characters; never a secret |
+| `attachments` | JSON array of absolute local paths (at most 16); never copied or opened |
+| `status` | `new`, `taken`, `answered` or `cancelled` |
+| `created`, `taken_by`, `taken_at` | When posted, and who took it when |
+
+| `replies` column | Meaning |
+|---|---|
+| `id`, `request_id` | Primary key, and the request answered |
+| `from_agent`, `text`, `attachments`, `created` | As for requests |
+
+Taking a request is one transaction that moves `new` to `taken`, so no request is delivered to two
+watchers. The first reply moves a request to `answered`. The JSON lines printed by `tail` and
+`watch-replies` use the keys `id, to, from, text, attachments, status, created, taken_by, taken_at` and
+`id, request_id, from, text, attachments, created`.
+
+## 22. The AI dock's endpoints (`ai_endpoints.json`)
+
+Written by the editor's AI dock (ADR-0028) to `%APPDATA%/GUO/ai_endpoints.json` (`~/.config/guo/` elsewhere),
+never to a project or `.godot`. A JSON array of `{ "Name", "Url", "Model", "Key" }` for the OpenAI-compatible
+endpoints the user added. `Key` is `{ "store", "iv", "blob" }`, the same `Secret` that `servers.json` keeps
+for a pre-game password: ciphertext sealed by the operating system's store (DPAPI on Windows), bound to
+`ai:URL:NAME`, or null when the endpoint has no key or the platform keeps none. The key itself is never in the file.

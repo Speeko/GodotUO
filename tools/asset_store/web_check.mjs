@@ -15,6 +15,8 @@ for (const source of scripts) {
 const indexResponse = await fetch(new URL('index.json', base));
 assert.equal(indexResponse.status, 200);
 const index = await indexResponse.json();
+// A signed (v2) index nests each manifest; the checks below read the v1 shape.
+index.packs = index.packs.map(p => p.manifest ? { ...p.manifest, sha256: p.sha256, size: p.size, url: p.urls[0], preview_url: p.preview_url } : p);
 assert.ok(index.packs.length >= 5, 'Fixture must exercise every pack kind');
 
 class Element {
@@ -87,7 +89,7 @@ const page = await boot();
 const allCards = () => descendants(page.get('shelves'), 'article');
 assert.equal(allCards().length, index.packs.length, 'Every fixture pack must render');
 assert.equal(page.get('sample-note').hidden, false, 'Samples must be labelled');
-assert.equal(descendants(page.get('tabs'), 'button').length, 6, 'All plus five kind filters');
+assert.equal(descendants(page.get('tabs'), 'button').length, 7, 'All plus six populated kind filters');
 const featured = index.packs.find(p => p.id === 'moongate-shimmer');
 assert.equal(page.get('feature-title').textContent, featured.title, 'Metadata must remain literal text');
 assert.equal(page.get('feature-img').src, new URL(featured.preview_url, base).href);
@@ -102,6 +104,12 @@ assert.equal(page.get('detail').open, false);
 descendants(page.get('tabs'), 'button').find(b => b.textContent.startsWith('Themes')).dispatch('click');
 assert.equal(allCards().length, 1, 'Theme filter failed');
 assert.ok(allCards()[0].textContent.includes('Sample'), 'Sample card badge missing');
+descendants(page.get('tabs'), 'button').find(b => b.textContent.startsWith('Razor scripts')).dispatch('click');
+assert.equal(allCards().length, 1, 'Razor script filter failed');
+descendants(allCards()[0], 'button')[0].dispatch('click');
+assert.ok(page.get('detail-note').textContent.includes('personal copies'), 'Script install guidance missing');
+assert.ok(page.get('detail-note').textContent.includes('not Razor Enhanced'), 'Script dialect boundary missing');
+page.get('detail-close').dispatch('click');
 page.get('search').value = 'no-such-pack'; page.get('search').dispatch('input');
 assert.equal(allCards().length, 0); assert.equal(page.get('empty').hidden, false);
 page.get('search').value = ''; page.get('search').dispatch('input');

@@ -148,23 +148,10 @@ namespace GUO.Input.Gamepad
                 return;
             }
 
-            switch (w)
-            {
-                case WheelWindow.Backpack: GameActions.OpenBackpack(world); break;
-                case WheelWindow.Paperdoll: GameActions.OpenPaperdoll(world, world.Player); break;
-                case WheelWindow.Journal: GameActions.OpenJournal(world); break;
-                case WheelWindow.Skills: GameActions.OpenSkills(world); break;
-                case WheelWindow.Spellbook: RunMacro(world, MacroType.Open, MacroSubType.MageSpellbook); break;
-                case WheelWindow.WorldMap: GameActions.OpenWorldMap(world); break;
-                case WheelWindow.Macros: MacroRow(world); break;
-                case WheelWindow.Options: GameActions.OpenSettings(world); break;
-                case WheelWindow.Status: GameActions.OpenStatusBar(world); break;
-                case WheelWindow.MiniMap: GameActions.OpenMiniMap(world); break;
-                case WheelWindow.Chat: GameActions.OpenChat(world); break;
-                case WheelWindow.QuestLog: GameActions.RequestQuestMenu(world); break;
-                case WheelWindow.Guild: GameActions.OpenGuildGump(world); break;
-                case WheelWindow.Party: RunMacro(world, MacroType.Open, MacroSubType.PartyManifest); break;
-            }
+            // The screen is the window. The pack, the paperdoll, skills and the
+            // spellbook also ask the shard, because their contents are not all
+            // local; the screen does not wait for the reply.
+            PadScreen.Open(w);
         }
 
         /// <summary>

@@ -55,6 +55,12 @@ namespace GUO.Input.Gamepad
         /// <summary>For probes: "applied", "cancelled", "skipped", or "" while none has ended.</summary>
         public static string LastResult { get; private set; } = "";
 
+        /// <summary>For probes: the words on the card, one row a line. No descriptions.</summary>
+        public static string VisibleText { get; private set; } = "";
+
+        /// <summary>For probes: button glyphs drawn on the card.</summary>
+        public static int GlyphCount { get; private set; }
+
         /// <summary>For probes: which job is being asked for (Bind), or null.</summary>
         public static PadCommand? Asking => _phase == Phase.Bind ? PadBindings.Order[_step] : null;
 
@@ -96,6 +102,7 @@ namespace GUO.Input.Gamepad
         {
             PadWheel.Close();
             PadRadar.Close();
+            PadScreen.Close();
             _phase = Phase.Bind;
             _step = 0;
             _chosen.Clear();
@@ -124,7 +131,7 @@ namespace GUO.Input.Gamepad
             _chosen.Clear();
             LastResult = "cancelled";
             GD.Print("[GUO] pad wizard: cancelled, nothing changed");
-            Finish("Cancelled", "Nothing was changed.");
+            Finish("Cancelled", "");
         }
 
         private static void Finish(string big, string small)
@@ -367,7 +374,7 @@ namespace GUO.Input.Gamepad
                 PadBindings.Apply(_chosen, _slots);
                 LastResult = "applied";
                 GD.Print("[GUO] pad wizard: applied");
-                Finish("All set", "Your controls are saved.");
+                Finish("Saved", "");
                 return;
             }
 
@@ -475,10 +482,10 @@ namespace GUO.Input.Gamepad
             private static void Offer()
             {
                 Clear();
-                Centred("Controller", UoTheme.Heading, 2);
-                Centred("Set up what each button does? It takes a minute: hold the button you want for each job.", UoTheme.Ink, 1, true);
-                Centred("You can do it later from Options, Controller buttons.", UoTheme.Muted, 1, true);
+                Centred("Set controls", UoTheme.Heading, 2);
                 Prompt(new[] { (PadAction.Confirm, "Set controls"), (PadAction.Cancel, "Not now") });
+                VisibleText = "Set controls\nSet controls\nNot now";
+                GlyphCount = CountGlyphs(_col);
                 Layout();
             }
 
@@ -501,6 +508,7 @@ namespace GUO.Input.Gamepad
                 };
             }
             private static Label _holding;
+            private static string _holdingWas = "";
             private const float MeterWidth = 240f;
 
             public static void Step()
@@ -511,30 +519,65 @@ namespace GUO.Input.Gamepad
                     return;
                 }
 
-                PadCommand c = PadBindings.Order[_step];
                 Clear();
-                Centred("Set controls", UoTheme.Heading);
-                Centred($"{_step + 1} / {PadBindings.Order.Length}", UoTheme.Muted);
-                Centred(PadBindings.Name(c), UoTheme.Danger, 3);
-                Centred(PadBindings.Describe(c), UoTheme.Ink, 1, true);
-                Centred("Press and hold what you want for this", UoTheme.Heading);
+                var words = new System.Text.StringBuilder();
+
+                for (int i = 0; i < PadBindings.Order.Length; i++)
+                {
+                    PadCommand c = PadBindings.Order[i];
+                    bool lit = i == _step;
+                    PadInput? shown = _chosen.TryGetValue(c, out PadInput picked) ? picked : PadBindings.For(c);
+                    string set = shown is PadInput s ? s.Label : "nothing";
+                    words.Append(PadBindings.Name(c)).Append('\t').Append(set).Append('\n');
+
+                    var row = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, CustomMinimumSize = new Vector2(300, 0) };
+                    row.AddThemeStyleboxOverride("panel", lit
+                        ? Overlay.Frame(Overlay.Parchment, 3, 1)
+                        : new StyleBoxEmpty { ContentMarginLeft = 3, ContentMarginRight = 3, ContentMarginTop = 1, ContentMarginBottom = 1 });
+                    HBoxContainer line = Overlay.Row(6);
+                    Label name = Overlay.Text(PadBindings.Name(c), lit ? UoTheme.Danger : UoTheme.Ink);
+                    name.CustomMinimumSize = new Vector2(120, 0);
+                    name.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+                    line.AddChild(name);
+                    line.AddChild(PadArt.Cap(shown));
+                    Label current = Overlay.Text(set, UoTheme.Ink);
+                    current.CustomMinimumSize = new Vector2(72, 0);
+                    line.AddChild(current);
+                    row.AddChild(line);
+                    _col.AddChild(row);
+
+                    if (lit)
+                    {
+                        _holding = current;
+                        _holdingWas = set;
+                    }
+                }
 
                 // The meter: the status bar's own track and fill lines, their ends kept.
                 _meter = new ProgressBar
                 {
-                    ShowPercentage = false, MinValue = 0, MaxValue = 1, Step = 0, Value = 0,
+                    ShowPercentage = false, MinValue = 0, MaxValue = 1, Step = 0, Value = _progress / Hold,
                     CustomMinimumSize = new Vector2(MeterWidth, 11), MouseFilter = Control.MouseFilterEnum.Ignore,
                     SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter, TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
                 };
                 _meter.AddThemeStyleboxOverride("background", Line(PadArt.LineTrack));
                 _meter.AddThemeStyleboxOverride("fill", Line(PadArt.LineFill));
                 _col.AddChild(_meter);
-
-                PadInput? now = PadBindings.For(c);
-                Centred($"Now: {(now is PadInput n ? n.Label : "nothing")}", UoTheme.Muted);
-                _holding = Centred(" ", UoTheme.Heading);
-                Centred("Hold three buttons at once to cancel", UoTheme.Muted);
+                VisibleText = words.ToString().TrimEnd();
+                GlyphCount = CountGlyphs(_col);
                 Layout();
+            }
+
+            private static int CountGlyphs(Node node)
+            {
+                int n = node is TextureRect ? 1 : 0;
+
+                foreach (Node child in node.GetChildren())
+                {
+                    n += CountGlyphs(child);
+                }
+
+                return n;
             }
 
             public static void Meter(double fraction, string holding)
@@ -545,16 +588,19 @@ namespace GUO.Input.Gamepad
                 }
 
                 _meter.Value = Math.Clamp(fraction, 0, 1);
-                _holding.Text = holding.Length > 0 ? "Holding: " + holding : " ";
+
+                if (_holding != null && GodotObject.IsInstanceValid(_holding))
+                {
+                    _holding.Text = holding.Length > 0 ? holding : _holdingWas;
+                }
             }
 
             public static void Slots()
             {
                 Ensure();
                 Clear();
-                Centred("Set controls: the menu wheel", UoTheme.Heading);
-                Centred($"Slice {_slot + 1} / 8: {SliceNames[_slot]}", UoTheme.Danger, 2);
-                Centred("Choose its window with the D-pad, then A", UoTheme.Ink);
+                Centred("Menu wheel", UoTheme.Heading);
+                Centred(SliceNames[_slot], UoTheme.Danger, 2);
 
                 var grid = new GridContainer { Columns = 2, MouseFilter = Control.MouseFilterEnum.Ignore };
                 grid.AddThemeConstantOverride("h_separation", 6);
@@ -592,7 +638,6 @@ namespace GUO.Input.Gamepad
                 }
 
                 _col.AddChild(grid);
-                Centred("Hold three buttons at once to cancel", UoTheme.Muted);
                 Layout();
             }
 
@@ -601,7 +646,14 @@ namespace GUO.Input.Gamepad
                 Ensure();
                 Clear();
                 Centred(big, UoTheme.Heading, 3);
-                Centred(small, UoTheme.Ink);
+
+                if (small.Length > 0)
+                {
+                    Centred(small, UoTheme.Ink);
+                }
+
+                VisibleText = big;
+                GlyphCount = 0;
                 Layout();
             }
 

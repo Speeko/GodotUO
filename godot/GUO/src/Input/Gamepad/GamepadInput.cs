@@ -173,6 +173,14 @@ namespace GUO.Input.Gamepad
                 return;
             }
 
+            // A full-screen window takes the sticks: no walking, no pointer.
+            if (PadScreen.IsOpen)
+            {
+                PadScreen.Tick();
+
+                return;
+            }
+
             // The wheel takes both sticks: no walking, no pointer, while it is up.
             if (PadWheel.IsOpen)
             {
@@ -306,6 +314,17 @@ namespace GUO.Input.Gamepad
 
         private static void OnButton(InputEventJoypadButton e)
         {
+            // A full-screen window takes the D-pad: move in its list, not walk.
+            if (PadScreen.IsOpen && e.ButtonIndex is JoyButton.DpadUp or JoyButton.DpadDown or JoyButton.DpadLeft or JoyButton.DpadRight)
+            {
+                if (e.Pressed)
+                {
+                    PadScreen.Move(e.ButtonIndex is JoyButton.DpadUp or JoyButton.DpadLeft ? -1 : 1);
+                }
+
+                return;
+            }
+
             // An open window menu takes the D-pad: select its controls, not walk.
             if (Touch.WindowMenu.IsOpen && e.ButtonIndex is JoyButton.DpadUp or JoyButton.DpadDown or JoyButton.DpadLeft or JoyButton.DpadRight)
             {
@@ -368,6 +387,16 @@ namespace GUO.Input.Gamepad
             switch (command)
             {
                 case PadCommand.Use:
+                    if (PadScreen.IsOpen)
+                    {
+                        if (pressed)
+                        {
+                            PadScreen.Activate();
+                        }
+
+                        return;
+                    }
+
                     if (PadRadar.IsOpen)
                     {
                         if (pressed)
@@ -394,6 +423,13 @@ namespace GUO.Input.Gamepad
                     return;
 
                 case PadCommand.Cancel:
+                    if (pressed && PadScreen.IsOpen)
+                    {
+                        PadScreen.Close();
+
+                        return;
+                    }
+
                     if (pressed && PadRadar.IsOpen)
                     {
                         PadRadar.Cancel();
@@ -429,6 +465,11 @@ namespace GUO.Input.Gamepad
                     return;
 
                 case PadCommand.MenuWheel:
+                    if (pressed && PadScreen.IsOpen)
+                    {
+                        PadScreen.Close();
+                    }
+
                     if (pressed && !PadRadar.IsOpen && inWorld)
                     {
                         PadWheel.Begin();
@@ -441,6 +482,11 @@ namespace GUO.Input.Gamepad
                     return;
 
                 case PadCommand.InteractRadar:
+                    if (pressed && PadScreen.IsOpen)
+                    {
+                        PadScreen.Close();
+                    }
+
                     if (pressed && !PadWheel.IsOpen && inWorld)
                     {
                         PadRadar.Begin();
@@ -456,6 +502,17 @@ namespace GUO.Input.Gamepad
             // The rest act once, on the press.
             if (!pressed)
             {
+                return;
+            }
+
+            if (PadScreen.IsOpen)
+            {
+                switch (command)
+                {
+                    case PadCommand.TargetLast: PadScreen.Page(-1); break;
+                    case PadCommand.NextHostile: PadScreen.Page(1); break;
+                }
+
                 return;
             }
 
@@ -528,13 +585,16 @@ namespace GUO.Input.Gamepad
                     {
                         PadRadar.Context();
                     }
-                    else if (Touch.TouchInput.Bar is { } bar)
+                    else if (Touch.TouchInput.Bar is { } bar && bar.HandleShown)
                     {
                         bar.ToggleRow();
                     }
                     else if (inWorld)
                     {
-                        PadWheel.MacroRow(world);
+                        // No macro row on this layout (a Deck): the button used to
+                        // call ToggleRow on a bar whose handle is hidden, which
+                        // returns without opening anything.
+                        PadScreen.Open(WheelWindow.Macros);
                     }
 
                     return;

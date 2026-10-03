@@ -40,10 +40,6 @@ namespace GUO.Input.Gamepad
         Macros,
         Options,
         Status,
-        MiniMap,
-        Chat,
-        QuestLog,
-        Guild,
         Party
     }
 
@@ -173,29 +169,9 @@ namespace GUO.Input.Gamepad
             _ => c.ToString(),
         };
 
-        /// <summary>What a job does, for "Set controls" (in place of Ghostroads' clips, for now).</summary>
-        public static string Describe(PadCommand c) => c switch
-        {
-            PadCommand.Use => "Click at the pointer: confirm, pick up, use. Also the radar's Use.",
-            PadCommand.Cancel => "Escape: cancel a target cursor, leave a text field, close a menu.",
-            PadCommand.AttackLast => "Attack your last target. In the radar: look (single click).",
-            PadCommand.TargetLast => "Send the target cursor to your last target. In the radar: the previous thing.",
-            PadCommand.WarMode => "Switch between peace and war.",
-            PadCommand.NextHostile => "Select the next hostile as your target. In the radar: the next thing.",
-            PadCommand.AlwaysRun => "Run everywhere, or walk again.",
-            PadCommand.MacroRow => "Open or close the macro row. In the radar: the context menu.",
-            PadCommand.MenuWheel => "Hold for the menu wheel; point at a window and let go to open it.",
-            PadCommand.InteractRadar => "Hold to light up what is near; pick one and use, look or ask.",
-            PadCommand.Options => "Open the options.",
-            PadCommand.Drawer => "Open or close the one-screen drawer.",
-            _ => "",
-        };
-
         public static string Name(WheelWindow w) => w switch
         {
             WheelWindow.WorldMap => "World map",
-            WheelWindow.MiniMap => "Mini map",
-            WheelWindow.QuestLog => "Quest log",
             _ => w.ToString(),
         };
 

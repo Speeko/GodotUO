@@ -103,6 +103,7 @@ internal static class PadWheelsProbe
         await Buttons(host, world, profile);
         await Wizard(host, world);
         await Trackpad(host, world);
+        await Screens(host);
 
         PadBindings.ResetToDefaults();
         GamepadInput.Forced = null;
@@ -125,6 +126,10 @@ internal static class PadWheelsProbe
         }
 
         Check("\"Set controls\" is offered after the first login on a pad", !before && PadWizard.Offering);
+        Check("the offer is the action and the buttons, with no description",
+            PadWizard.VisibleText == "Set controls\nSet controls\nNot now"
+            && !PadWizard.VisibleText.Contains("minute") && !PadWizard.VisibleText.Contains("hold the button"),
+            PadWizard.VisibleText);
         await Shot(host, "offer");
 
         await Button(host, JoyButton.B);
@@ -153,8 +158,9 @@ internal static class PadWheelsProbe
         Axis(JoyAxis.LeftY, 0f);
         bool opened = await Until(host, () => backpack != null && UIManager.GetGump<Gump>(backpack.Serial) != null, 120);
         Check("LT opens the wheel; the left stick up points at the backpack; letting go opens it",
-            open && focus == 0 && PadWheel.LastResult == "opened Backpack" && opened,
-            $"open {open}, focus {focus}, {PadWheel.LastResult}, gump {opened}");
+            open && focus == 0 && PadWheel.LastResult == "opened Backpack" && opened
+            && PadScreen.IsOpen && PadScreen.Current == WheelWindow.Backpack && PadScreen.FillsClient && PadScreen.RowCount > 0,
+            $"open {open}, focus {focus}, {PadWheel.LastResult}, gump {opened}, screen {PadScreen.Current} fills {PadScreen.FillsClient} rows {PadScreen.RowCount}");
         await Shot(host, "backpack_open");
 
         // Paperdoll: top right, with the right stick this time.
@@ -170,7 +176,9 @@ internal static class PadWheelsProbe
         Axis(JoyAxis.RightX, 0f);
         Axis(JoyAxis.RightY, 0f);
         opened = await Until(host, () => UIManager.GetGump<PaperDollGump>(world.Player.Serial) != null, 180);
-        Check("the right stick points too: top right opens the paperdoll", focus == 1 && opened, $"focus {focus}, {PadWheel.LastResult}");
+        Check("the right stick points too: top right opens the paperdoll",
+            focus == 1 && opened && PadScreen.IsOpen && PadScreen.Current == WheelWindow.Paperdoll && PadScreen.FillsClient,
+            $"focus {focus}, {PadWheel.LastResult}, screen {PadScreen.Current} fills {PadScreen.FillsClient}");
         await Shot(host, "paperdoll_open");
 
         // A tap reopens the last window the wheel opened.
@@ -180,7 +188,9 @@ internal static class PadWheelsProbe
         await InputProbe.Wait(host, 3);
         Axis(JoyAxis.TriggerLeft, 0f);
         opened = await Until(host, () => UIManager.GetGump<PaperDollGump>(world.Player.Serial) != null, 180);
-        Check("a quick tap of LT reopens the last window (the paperdoll)", PadWheel.LastResult == "reopened Paperdoll" && opened, PadWheel.LastResult);
+        Check("a quick tap of LT reopens the last window (the paperdoll)",
+            PadWheel.LastResult == "reopened Paperdoll" && opened && PadScreen.Current == WheelWindow.Paperdoll && PadScreen.FillsClient,
+            PadWheel.LastResult);
 
         // Held, no stick, let go in the middle: nothing.
         int gumps = UIManager.Gumps.Count();
@@ -188,8 +198,8 @@ internal static class PadWheelsProbe
         await InputProbe.Wait(host, 30);
         Axis(JoyAxis.TriggerLeft, 0f);
         await InputProbe.Wait(host, 30);
-        Check("let go in the middle: nothing opens", PadWheel.LastResult == "nothing" && UIManager.Gumps.Count() == gumps,
-            $"{PadWheel.LastResult}, gumps {gumps} -> {UIManager.Gumps.Count()}");
+        Check("let go in the middle: nothing opens", PadWheel.LastResult == "nothing" && UIManager.Gumps.Count() == gumps && !PadScreen.IsOpen,
+            $"{PadWheel.LastResult}, gumps {gumps} -> {UIManager.Gumps.Count()}, screen {PadScreen.IsOpen}");
 
         UIManager.GetGump<PaperDollGump>(world.Player.Serial)?.Dispose();
 
@@ -395,6 +405,13 @@ internal static class PadWheelsProbe
             await InputProbe.Wait(host, 4);
         }
 
+        string card = PadWizard.VisibleText ?? "";
+        bool plain = card.Contains("Use / click") && card.Contains("Cancel") && card.Contains("Menu wheel")
+            && card.Contains("\tA") && !card.Contains("Click at the pointer") && !card.Contains("Press and hold")
+            && !card.Contains("Escape:") && !card.Contains("what it does") && PadWizard.GlyphCount >= 4;
+        Check("each set-controls row is the action, its glyph, and what it is set to", plain,
+            $"glyphs {PadWizard.GlyphCount}\n{card}");
+
         // Three at once: cancelled, nothing changed.
         string fileBefore = File.Exists(PadBindings.FilePath) ? File.ReadAllText(PadBindings.FilePath) : "";
         Down(JoyButton.A);
@@ -484,8 +501,9 @@ internal static class PadWheelsProbe
         await Button(host, JoyButton.RightStick);
         await InputProbe.Wait(host, 60);
         Check("R3 no longer toggles war mode; it is the macro row now", world.Player.InWarMode == war
-            && (UIManager.GetGump<OptionsGump>() != null || (GUO.Input.Touch.TouchInput.Bar?.HandleShown ?? false)),
-            $"war {war} -> {world.Player.InWarMode}, options {(UIManager.GetGump<OptionsGump>() != null)}");
+            && (UIManager.GetGump<OptionsGump>() != null || (GUO.Input.Touch.TouchInput.Bar?.HandleShown ?? false)
+                || (PadScreen.IsOpen && PadScreen.Current == WheelWindow.Macros && PadScreen.FillsClient)),
+            $"war {war} -> {world.Player.InWarMode}, options {(UIManager.GetGump<OptionsGump>() != null)}, screen {PadScreen.Current}");
         await Shot(host, "rebound_macro_row");
         UIManager.GetGump<OptionsGump>()?.Dispose();
 
@@ -502,9 +520,33 @@ internal static class PadWheelsProbe
         await InputProbe.Wait(host, 2);
         Axis(JoyAxis.LeftX, 0f);
         await InputProbe.Wait(host, 20);
-        Check("the wheel's changed slice opens its new window", PadWheel.LastResult == "opened Status", PadWheel.LastResult);
+        Check("the wheel's changed slice opens its new window",
+            PadWheel.LastResult == "opened Status" && PadScreen.IsOpen && PadScreen.Current == WheelWindow.Status
+            && PadScreen.FillsClient && PadScreen.RowCount > 0,
+            $"{PadWheel.LastResult}, rows {PadScreen.RowCount}, fills {PadScreen.FillsClient}");
+        PadScreen.Close();
 
         PadBindings.ResetToDefaults();
+    }
+
+    // --- every wheel window is a screen ----------------------------------------------------------
+
+    private static async System.Threading.Tasks.Task Screens(Node host)
+    {
+        foreach (WheelWindow w in PadWizard.Choices)
+        {
+            PadScreen.Close();
+            PadWheel.Open(w);
+            await InputProbe.Wait(host, 2);
+            Check($"the {PadBindings.Name(w)} window opens full screen",
+                PadScreen.IsOpen && PadScreen.Current == w && PadScreen.FillsClient && PadScreen.RowCount > 0,
+                $"open {PadScreen.IsOpen}, current {PadScreen.Current}, fills {PadScreen.FillsClient}, rows {PadScreen.RowCount}");
+        }
+
+        PadScreen.Close();
+        Check("the wheel no longer offers a window that only asks the shard",
+            Array.IndexOf(PadWizard.Choices, WheelWindow.Journal) >= 0 && PadWizard.Choices.Length == 10,
+            $"choices {PadWizard.Choices.Length}");
     }
 
     // --- the Steam Deck trackpad: a mouse beside the pad ----------------------------------------------

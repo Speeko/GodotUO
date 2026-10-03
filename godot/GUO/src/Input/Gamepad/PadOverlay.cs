@@ -153,10 +153,6 @@ namespace GUO.Input.Gamepad
             WheelWindow.Macros => 0x1F14,    // a recall rune
             WheelWindow.Options => 0x1EB8,   // a tool kit
             WheelWindow.Status => 0x0E21,    // a bandage
-            WheelWindow.MiniMap => 0x14EC,   // a map, rolled
-            WheelWindow.Chat => 0x0EB2,      // a harp
-            WheelWindow.QuestLog => 0x0FBD,  // a book
-            WheelWindow.Guild => 0x1BC3,     // a shield
             WheelWindow.Party => 0x0E79,     // a pouch
             _ => 0x0E75,
         };

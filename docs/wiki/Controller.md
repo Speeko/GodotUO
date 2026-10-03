@@ -30,7 +30,7 @@ job except walking and the pointer can be moved to another input with
 | A (Cross) | Use: left click at the pointer (confirm, pick, use) |
 | B (Circle) | Cancel: Escape (a target cursor, a text field, a menu) |
 | X (Square) | Attack your last target. On mobile layouts (touch screens), the window menu (size, lock, which screen) for the topmost window instead |
-| Y (Triangle) | Open or close the macro row (the touch bar's second row; without a touch bar, Options > Macros) |
+| Y (Triangle) | Open or close the macro row when that row is on the touch bar; otherwise the Macros screen |
 | LB | Target last (sends an open target cursor to your last target) |
 | RB | Next hostile (selects the next hostile as your target) |
 | LT, held | The menu wheel |
@@ -49,6 +49,15 @@ Hold LT and eight windows ring your character, drawn in the client's own
 art, while the game keeps running. Push either stick toward one (the middle
 is "none"): it lights gold and steps out. Let go of LT to open it.
 
+Each window is a full-screen controller screen: the D-pad moves, A acts,
+B closes, LB and RB change page. No mouse. The pack, the paperdoll, skills
+and the spellbook still ask the shard for what it owns (the pack's contents,
+the paperdoll, skill values, the book), but the screen is up at once from
+what the client already has. Chat, the quest log, the guild and the mini map
+are not on the wheel: those calls only asked the shard, and nothing opened
+when it did not answer. The status bar is the same when it is already on
+screen, so Status is a screen of the character's numbers instead.
+
 | Slice | Opens |
 |---|---|
 | Top | Backpack |
@@ -57,17 +66,16 @@ is "none"): it lights gold and steps out. Let go of LT to open it.
 | Bottom right | Skills |
 | Bottom | Spellbook |
 | Bottom left | World map |
-| Left | Macros (the macro row) |
+| Left | Macros |
 | Top left | Options |
 
 - Let go with the stick in the middle: nothing opens.
 - A quick **tap** of LT (under 0.2 s, no stick) opens the last window the
   wheel opened again.
-- B while the wheel is up closes it without opening anything.
-- Each slice opens what the top bar or the client's "Open" macro opens, so
-  the shard sees the same requests a mouse would make. Which window sits in
-  which slice is chosen at the end of Set controls (Status, Mini map, Chat,
-  Quest log, Guild and Party are offered too).
+- B while the wheel is up closes it without opening anything. B on a screen
+  closes the screen.
+- Which window sits in which slice is chosen at the end of Set controls.
+  Status and Party are offered too.
 
 ## The interact radar (RT)
 
@@ -101,13 +109,14 @@ Options > Video > Controller buttons > **Set controls...**, and offered once
 after your first login with a pad (B on that card skips it; it is not offered
 again).
 
-1. One job at a time, in this order: Use, Cancel, Attack last, Target last,
-   Toggle war mode, Next hostile, Always run, Macro row, Menu wheel,
-   Interact radar, Options, Drawer. The job's name is shown big with a line
-   on what it does.
-2. **Press and hold** the button, trigger or stick direction you want for it.
-   The meter fills while exactly one input is held (0.7 s); then it is taken
-   and the next job comes up. Let go before the next one counts.
+1. Every job is a row: the action, the glyph for what it is set to, and
+   that input's name. Nothing else. The order is Use, Cancel, Attack last,
+   Target last, Toggle war mode, Next hostile, Always run, Macro row, Menu
+   wheel, Interact radar, Options, Drawer. The row being set is highlighted.
+2. **Press and hold** the button, trigger or stick direction you want for
+   the highlighted row. The meter fills while exactly one input is held
+   (0.7 s); then it is taken and the next row lights. Let go before the
+   next one counts.
 3. Then the wheel's eight slices: choose each one's window with the D-pad and A.
 4. Everything is applied together at the end. Giving one input to a job takes
    it away from any other job.

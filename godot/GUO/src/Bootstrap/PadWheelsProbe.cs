@@ -638,14 +638,18 @@ internal static class PadWheelsProbe
             // still reads innocent. Send the attack packet the client sends
             // once that query is confirmed.
             ProfileManager.CurrentProfile.EnabledCriminalActionQuery = false;
-            // Fists only reach one tile. Stand on the dummy, then swing.
-            await InputProbe.Say(host, $"[go {attack.X} {attack.Y} {attack.Z}");
-            await Until(host, () => attack.Distance <= 1, 90);
+            // Fists only reach one tile. Stand beside the dummy, not on it
+            // (same-tile LineOfSight fails CheckAttack, so the packet never
+            // becomes a combatant).
+            await InputProbe.Say(host, $"[go {attack.X + 1} {attack.Y} {attack.Z}");
+            await Until(host, () => attack.Distance <= 1 && attack.Distance > 0, 90);
             GameActions.Attack(world, attack.Serial);
-            await Until(host, () => JournalHas("GUO_PAD: hit attack-dummy") || attack.Hits < attack.HitsMax, 240);
+            GameActions.RequestMobileStatus(world, attack.Serial);
+            GD.Print($"[GUO] pad wheels probe: attack sent dist {attack.Distance} noto {attack.NotorietyFlag} last {world.TargetManager.LastAttack:X8} at {attack.X},{attack.Y},{attack.Z} player {world.Player.X},{world.Player.Y},{world.Player.Z} hits {attack.Hits}/{attack.HitsMax}");
+            bool landed = await Until(host, () => JournalHas("GUO_PAD: hit attack-dummy") || attack.Hits < attack.HitsMax, 300);
             Check("attack binding reaches the attack dummy",
-                JournalHas("GUO_PAD: hit attack-dummy") || attack.Hits < attack.HitsMax,
-                $"hits {attack.Hits}/{attack.HitsMax}, journal {JournalHas("GUO_PAD: hit attack-dummy")}, war {world.Player.InWarMode}");
+                world.TargetManager.LastAttack == attack.Serial && (landed || JournalHas("GUO_PAD: hit attack-dummy")),
+                $"hits {attack.Hits}/{attack.HitsMax}, journal {JournalHas("GUO_PAD: hit attack-dummy")}, war {world.Player.InWarMode}, last {world.TargetManager.LastAttack:X8} want {attack.Serial:X8}");
         }
 
         if (use != null)

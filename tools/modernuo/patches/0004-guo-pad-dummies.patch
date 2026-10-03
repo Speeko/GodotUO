@@ -1,9 +1,9 @@
 diff --git a/Projects/UOContent/Custom/GuoPadDummies.cs b/Projects/UOContent/Custom/GuoPadDummies.cs
 new file mode 100644
-index 000000000..65c638004
+index 000000000..guopad001
 --- /dev/null
 +++ b/Projects/UOContent/Custom/GuoPadDummies.cs
-@@ -0,0 +1,362 @@
+@@ -0,0 +1,423 @@
 +// GUO pad binding dummies: predictable journal lines a probe can assert.
 +// Spawn beside New Haven (or the caller) with [GuoPadDummies.
 +
@@ -107,7 +107,7 @@ index 000000000..65c638004
 +        SetHits(200);
 +        Fame = 0;
 +        Karma = -1000;
-+    
++        Timer.StartTimer(TimeSpan.FromMilliseconds(500), StartWatch);
 +    }
 +
 +    public GuoAttackDummy(Serial serial) : base(serial)
@@ -116,26 +116,86 @@ index 000000000..65c638004
 +
 +    public override bool ClickTitle => false;
 +    public override bool AlwaysMurderer => true;
++    public override bool InitialInnocent => false;
 +    public override bool IsEnemy(Mobile m) => m?.Player == true;
++    public override bool BardImmune => true;
++    public override bool IsInvulnerable => false;
 +
-+    public override void OnDamage(int amount, Mobile from, bool willKill)
++    private TimerExecutionToken _watch;
++
++    protected override void OnMapChange(Map oldMap)
 +    {
-+        from?.SendMessage("GUO_PAD: hit attack-dummy");
-+        PublicOverheadMessage(MessageType.Regular, 0x3B2, false, "GUO_PAD: hit attack-dummy");
-+        base.OnDamage(amount, from, willKill);
++        base.OnMapChange(oldMap);
++        StartWatch();
 +    }
 +
-+    // A fresh character often misses. The attack itself is the binding under test.
-+    public override void AggressiveAction(Mobile aggressor, bool criminal)
++    public override void OnAfterSpawn()
 +    {
-+        aggressor?.SendMessage("GUO_PAD: hit attack-dummy");
++        base.OnAfterSpawn();
++        StartWatch();
++    }
++
++    private void StartWatch()
++    {
++        _watch.Cancel();
++        // AttackReq sets Combatant before the first swing. Watch for that so the
++        // binding probe does not depend on a hit roll or a delayed swing timer.
++        Timer.StartTimer(TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(200), WatchCombatants, out _watch);
++    }
++
++    private void WatchCombatants()
++    {
++        if (Deleted || Map == null)
++        {
++            _watch.Cancel();
++            return;
++        }
++
++        foreach (Mobile m in Map.GetMobilesInRange(Location, 3))
++        {
++            if (m?.Player == true && m.Combatant == this)
++            {
++                Signal(m);
++                return;
++            }
++        }
++    }
++
++    public void RecordAttack(Mobile from) => Signal(from);
++
++    private void Signal(Mobile from)
++    {
++        if (from == null || from.Deleted)
++        {
++            return;
++        }
++
++        from.SendMessage("GUO_PAD: hit attack-dummy");
 +        PublicOverheadMessage(MessageType.Regular, 0x3B2, false, "GUO_PAD: hit attack-dummy");
 +        if (Hits > 1)
 +        {
-+            Hits -= 1;
++            Hits = Math.Max(1, Hits - Math.Max(1, HitsMax / 10));
 +        }
 +
++        _watch.Cancel();
++    }
++
++    public override void OnDamage(int amount, Mobile from, bool willKill)
++    {
++        Signal(from);
++        base.OnDamage(amount, from, willKill);
++    }
++
++    public override void AggressiveAction(Mobile aggressor, bool criminal)
++    {
++        Signal(aggressor);
 +        base.AggressiveAction(aggressor, criminal);
++    }
++
++    public override void OnDelete()
++    {
++        _watch.Cancel();
++        base.OnDelete();
 +    }
 +
 +    public override void Serialize(IGenericWriter writer)
@@ -148,6 +208,7 @@ index 000000000..65c638004
 +    {
 +        base.Deserialize(reader);
 +        reader.ReadInt();
++        StartWatch();
 +    }
 +}
 +

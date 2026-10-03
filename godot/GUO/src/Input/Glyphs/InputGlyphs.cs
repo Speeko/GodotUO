@@ -169,7 +169,7 @@ namespace GUO.Input.Glyphs
             control.MouseEntered += Set;
         }
 
-        private static Texture2D Load(string name)
+        internal static Texture2D Load(string name)
         {
             if (string.IsNullOrEmpty(name))
             {

@@ -19,20 +19,106 @@ console-style PC games do. There is no setting to flip.
 ## Default layout
 
 Buttons are named by what's **printed** on your pad. GUO works out the layout
-from the pad's name, so an Xbox A and a PlayStation Cross both confirm.
+from the pad's name, so an Xbox A and a PlayStation Cross both confirm. Every
+job except walking and the pointer can be moved to another input with
+**Set controls** (below).
 
 | Control | Action |
 |---|---|
 | D-pad or left stick | Walk |
 | Right stick | Move the pointer |
-| A (Cross) | Left click at the pointer: confirm, pick, use |
-| B (Circle) | Escape: cancel a target cursor, leave a text field |
-| Y (Triangle) | Open or close the touch bar's macro row |
-| X (Square) | The window menu (size, lock, which screen) for the topmost window, on mobile layouts |
+| A (Cross) | Use: left click at the pointer (confirm, pick, use) |
+| B (Circle) | Cancel: Escape (a target cursor, a text field, a menu) |
+| X (Square) | Attack your last target. On mobile layouts (touch screens), the window menu (size, lock, which screen) for the topmost window instead |
+| Y (Triangle) | Open or close the macro row (the touch bar's second row; without a touch bar, Options > Macros) |
+| LB | Target last (sends an open target cursor to your last target) |
+| RB | Next hostile (selects the next hostile as your target) |
+| LT, held | The menu wheel |
+| RT, held | The interact radar |
+| L3 (left stick click) | Always run, on or off |
+| R3 (right stick click) | War mode, on or off |
+| Start / Menu / Options | The options |
 | Back / Select / View | Open or close the one-screen drawer |
 
 While the window menu is open, the D-pad moves between its controls instead
-of walking, A presses the selected control, and B closes the menu.
+of walking, A presses the selected control, and B closes it.
+
+## The menu wheel (LT)
+
+Hold LT and eight windows ring your character, drawn in the client's own
+art, while the game keeps running. Push either stick toward one (the middle
+is "none"): it lights gold and steps out. Let go of LT to open it.
+
+| Slice | Opens |
+|---|---|
+| Top | Backpack |
+| Top right | Paperdoll |
+| Right | Journal |
+| Bottom right | Skills |
+| Bottom | Spellbook |
+| Bottom left | World map |
+| Left | Macros (the macro row) |
+| Top left | Options |
+
+- Let go with the stick in the middle: nothing opens.
+- A quick **tap** of LT (under 0.2 s, no stick) opens the last window the
+  wheel opened again.
+- B while the wheel is up closes it without opening anything.
+- Each slice opens what the top bar or the client's "Open" macro opens, so
+  the shard sees the same requests a mouse would make. Which window sits in
+  which slice is chosen at the end of Set controls (Status, Mini map, Chat,
+  Quest log, Guild and Party are offered too).
+
+## The interact radar (RT)
+
+Hold RT and everything usable within 10 tiles is marked on the ground:
+people, monsters and animals, doors, corpses, containers and movable items.
+Hostiles (criminals, murderers, enemies) are marked red, everything else gold.
+
+- **Right stick:** the choice jumps to the nearest thing the way you push.
+- **LB / RB:** step to the previous / next thing, nearest first.
+- The choice gets the client's own highlight, the target brackets of the
+  "new target system", a name plate, and a card at the foot of the screen
+  saying what each button does:
+
+| Button (default) | With a choice |
+|---|---|
+| A | Use (a double click; in war mode on a mobile, an attack, as the client does) |
+| X | Look (a single click: its name) |
+| Y | Its context menu |
+| B | Close the radar |
+| Let go of RT | Use, if you chose something and pressed nothing; otherwise nothing |
+
+**Target cursors.** When a spell, skill or item puts up a target cursor, the
+radar is how a pad picks the target: hold RT, choose, and A sends the target
+to the choice; B cancels the cursor (and leaves the radar up).
+
+The reach is `radarRange` in `padbindings.json` (1 to 24 tiles, 10 by default).
+
+## Set controls
+
+Options > Video > Controller buttons > **Set controls...**, and offered once
+after your first login with a pad (B on that card skips it; it is not offered
+again).
+
+1. One job at a time, in this order: Use, Cancel, Attack last, Target last,
+   Toggle war mode, Next hostile, Always run, Macro row, Menu wheel,
+   Interact radar, Options, Drawer. The job's name is shown big with a line
+   on what it does.
+2. **Press and hold** the button, trigger or stick direction you want for it.
+   The meter fills while exactly one input is held (0.7 s); then it is taken
+   and the next job comes up. Let go before the next one counts.
+3. Then the wheel's eight slices: choose each one's window with the D-pad and A.
+4. Everything is applied together at the end. Giving one input to a job takes
+   it away from any other job.
+
+**Cancel:** hold three or more inputs at once, at any point. Nothing changes.
+
+Triggers and stick directions count as inputs (on past 60%, off under 30%).
+A stick direction bound to a job no longer walks or moves the pointer that way.
+
+The choices are saved in `padbindings.json` beside `settings.json`, so they
+belong to this install, not to one character.
 
 ## Button glyphs
 
@@ -45,12 +131,25 @@ the layout.
 
 - **AYN Thor** (dual screen): the built-in pad works in both Standard and Xbox
   mode. In Xbox mode GUO undoes the pad's A/B and X/Y swap.
-- **Steam Deck:** see [Steam Deck](Steam-Deck.md).
+- **Steam Deck:** see [Steam Deck](Steam-Deck.md). The right trackpad
+  works as the mouse at all times, alongside the pad: Steam Input sends it
+  as mouse motion and its click as a left click. On the Deck (and in any run
+  Steam launched, or Game Mode) with a pad connected, moving or clicking the
+  mouse moves and shows the one shared pointer but does not switch the hints
+  away from the pad; only a real key does. The right stick and the trackpad
+  move the same pointer, whichever moved last wins. While LT or RT is held,
+  the trackpad does not change the wheel's slice or the radar's choice.
 - **Android:** see [Android Build](Android-Build.md) and [Dual Screen](Dual-Screen.md).
 
 ## For developers
 
 - The design record is ADR-0025 (`docs/architecture/ADR-0025-gamepad-on-by-default.md`).
 - The code is `src/Input/Gamepad/GamepadInput.cs` and `src/Input/InputMode.cs`.
-- `--gamepad-probe` checks the bindings with scripted pad events (see
+- The menu wheel, radar and Set controls are `src/Input/Gamepad/PadWheel.cs`,
+  `PadRadar.cs`, `PadWizard.cs`; the action map is `PadBindings.cs`; their
+  layer and art are `PadOverlay.cs`. Set controls ports the behaviour of
+  Ghostroads' own "Set controls" (`game/ui/set_controls.gd`).
+- `--gamepad-probe` checks the bindings with scripted pad events, and
+  `--pad-wheels-probe` the wheel, the radar, the new buttons, Set controls and
+  the trackpad, with a picture at each step (see
   [Scripted Runs and Probes](Scripted-Runs-and-Probes.md)).

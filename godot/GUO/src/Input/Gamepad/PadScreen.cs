@@ -60,7 +60,7 @@ namespace GUO.Input.Gamepad
         private const float StickRepeat = 0.22f;
 
         private static Control _root;
-        private static PanelContainer _frame;
+        private static Panel _frame;
         private static Control _stage;
         private static TextureRect _hero;
         private static GridContainer _grid;
@@ -912,7 +912,7 @@ namespace GUO.Input.Gamepad
         {
             _root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Name = "PadScreen" };
             layer.Ui.AddChild(_root);
-            _frame = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            _frame = new Panel { MouseFilter = Control.MouseFilterEnum.Ignore };
             _frame.AddThemeStyleboxOverride("panel", Overlay.Frame(Overlay.Stone, 8));
             _frame.ClipContents = true;
             _root.AddChild(_frame);
@@ -996,6 +996,7 @@ namespace GUO.Input.Gamepad
             {
                 _detail.Text = "";
             }
+            _detail.AddThemeFontSizeOverride("font_size", Math.Max(1, UoTheme.FontSize * FontScaleFor()));
 
             PaintHints();
 
@@ -1026,7 +1027,7 @@ namespace GUO.Input.Gamepad
 
             if (hero != null)
             {
-                _hero.CustomMinimumSize = hero.GetSize() * scale;
+                // CustomMinimumSize is handled in Layout now
             }
 
             for (int i = 0; i < _lines.Count; i++)
@@ -1179,18 +1180,25 @@ namespace GUO.Input.Gamepad
             {
                 float ps = Math.Clamp(PanelScale, 1, 3);
                 _content.Scale = new Vector2(ps, ps);
-                _content.Position = Vector2.Zero;
+                _content.Position = new Vector2(8, 8);
                 // Lay out in unscaled art pixels so the frame still fits (no clipped border).
-                _content.Size = new Vector2(frameSize.X / ps, frameSize.Y / ps);
+                _content.Size = new Vector2((frameSize.X - 16) / ps, (frameSize.Y - 16) / ps);
+                Control col = _content.GetNodeOrNull<Control>("PadScreenCol");
+                if (col != null)
+                {
+                    col.Size = _content.Size;
+                }
             }
 
             if (_hero.Visible && _hero.Texture != null)
             {
-                Vector2 want = _hero.CustomMinimumSize;
-                float maxW = Math.Max(48f, _frame.Size.X - 24f);
-                float maxH = Math.Max(48f, _frame.Size.Y * 0.42f);
+                float heroScale = Current == WheelWindow.Backpack ? 2.5f : 2f;
+                Vector2 want = _hero.Texture.GetSize() * heroScale;
+                float maxW = Math.Max(48f, _content.Size.X - 24f);
+                float maxH = Math.Max(48f, _content.Size.Y * 0.42f);
                 float s = Math.Min(1f, Math.Min(maxW / Math.Max(1f, want.X), maxH / Math.Max(1f, want.Y)));
                 Vector2 size = want * s;
+                _hero.CustomMinimumSize = Vector2.Zero; // ensure it doesn't force min size
                 _hero.Size = size;
                 _hero.Position = new Vector2((_stage.Size.X - size.X) * 0.5f, 0f);
                 float gridTop = size.Y + 6f;

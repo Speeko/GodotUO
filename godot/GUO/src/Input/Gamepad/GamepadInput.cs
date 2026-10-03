@@ -534,7 +534,14 @@ namespace GUO.Input.Gamepad
 
                     if (PadRadar.IsOpen)
                     {
-                        PadRadar.Look();
+                        if (Client.Game?.UO?.World?.Player?.InWarMode == true)
+                        {
+                            if (pressed) PadWheel.RunMacro(Client.Game.UO.World, Game.Managers.MacroType.AttackLast);
+                        }
+                        else
+                        {
+                            PadRadar.Look();
+                        }
                     }
                     else if (Touch.WindowMenu.IsOpen)
                     {

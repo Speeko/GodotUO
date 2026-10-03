@@ -484,9 +484,15 @@ namespace GUO.Input.Gamepad
                 _a.Add((PadCommand.Use, "Target"));
                 _a.Add((PadCommand.Cancel, "Cancel target"));
             }
+            else if (world.Player.InWarMode)
+            {
+                _a.Add((PadCommand.Use, chosen is Mobile ? "Attack" : "Use"));
+                _a.Add((PadCommand.AttackLast, "Attack last"));
+                _a.Add((PadCommand.MacroRow, "Menu"));
+            }
             else
             {
-                _a.Add((PadCommand.Use, world.Player.InWarMode && chosen is Mobile ? "Attack" : "Use"));
+                _a.Add((PadCommand.Use, "Use"));
                 _a.Add((PadCommand.AttackLast, "Look"));
                 _a.Add((PadCommand.MacroRow, "Menu"));
             }
